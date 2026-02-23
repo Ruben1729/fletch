@@ -1,0 +1,7 @@
+[package]
+name = "fletch"
+version = "0.1.0"
+edition = "2024"
+description = "High-throughput, data logger for test engineering and HIL platforms."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Ruben1729/fletch"
