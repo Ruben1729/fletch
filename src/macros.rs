@@ -6,7 +6,7 @@ macro_rules! fletch_schema {
         }
     ) => {
         pub struct $struct_name {
-            sink: Box<dyn $crate::FletchSink>,
+            sink: $crate::BackgroundSink,
             schema: std::sync::Arc<arrow::datatypes::Schema>,
             timestamps: arrow::array::Int64Builder,
             current_ts: Option<i64>,
@@ -14,38 +14,21 @@ macro_rules! fletch_schema {
         }
 
         impl $struct_name {
-            pub fn try_new(
-                mut custom_metadata: std::collections::HashMap<String, String>,
-                sink_factory: impl FnOnce(std::sync::Arc<arrow::datatypes::Schema>) -> anyhow::Result<Box<dyn $crate::FletchSink>>
-            ) -> anyhow::Result<Self> {
+            pub async fn try_new(uri: &str, run_id: &str) -> anyhow::Result<Self> {
                 let mut fields = vec![
-                    arrow::datatypes::Field::new("timestamp_ms", arrow::datatypes::DataType::Int64, false),
+                    arrow::datatypes::Field::new("timestamp_ns", arrow::datatypes::DataType::Int64, false),
                 ];
-
                 $( fields.push(arrow::datatypes::Field::new(
                     stringify!($field_name),
                     <$rust_type as $crate::FletchType>::data_type(),
                     true
                 )); )*
-
-                let mut schema_json = String::from("{");
-                schema_json.push_str("\"timestamp_ms\":\"Int64\",");
-                $(
-                    schema_json.push_str(&format!(
-                        "\"{}\":\"{:?}\",",
-                        stringify!($field_name),
-                        <$rust_type as $crate::FletchType>::data_type()
-                    ));
-                )*
-                schema_json.pop();
-                schema_json.push_str("}");
-                custom_metadata.insert("fletch_manifest".to_string(), schema_json);
                 let schema = std::sync::Arc::new(
-                    arrow::datatypes::Schema::new_with_metadata(fields, custom_metadata)
+                    arrow::datatypes::Schema::new(fields)
                 );
-
-                let sink = sink_factory(schema.clone())?;
-
+                let table_name = stringify!($struct_name);
+                let config = $crate::FletchConfig::init(uri, table_name, run_id, schema.clone()).await?;
+                let sink = $crate::BackgroundSink::spawn(config, schema.clone())?;
                 Ok(Self {
                     sink,
                     schema,
@@ -66,19 +49,17 @@ macro_rules! fletch_schema {
             }
 
             fn flush_batch(&mut self) -> anyhow::Result<()> {
-                // THE FIX: Fully qualify the trait method
+                self.commit_pending_row()?;
+                self.current_ts = None;
                 if arrow::array::ArrayBuilder::is_empty(&self.timestamps) { return Ok(()); }
-
                 let ts_array = std::sync::Arc::new(self.timestamps.finish()) as arrow::array::ArrayRef;
                 $(
                     let $field_name = <$rust_type as $crate::FletchType>::finish(&mut self.$field_name.0);
                 )*
-
                 let batch = arrow::record_batch::RecordBatch::try_new(
                     self.schema.clone(),
                     vec![ts_array, $( $field_name, )*]
                 )?;
-
                 self.sink.write_batch(batch)?;
                 Ok(())
             }
@@ -93,7 +74,6 @@ macro_rules! fletch_schema {
                     } else {
                         self.current_ts = Some(ts);
                     }
-
                     self.$field_name.1 = Some(value);
                     if arrow::array::ArrayBuilder::len(&self.timestamps) >= 10_000 {
                         self.flush_batch()?;
@@ -103,7 +83,6 @@ macro_rules! fletch_schema {
             )*
 
             pub fn close(mut self) -> anyhow::Result<()> {
-                self.commit_pending_row()?;
                 self.flush_batch()?;
                 self.sink.close()?;
                 Ok(())

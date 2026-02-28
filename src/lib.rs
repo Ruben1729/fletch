@@ -1,6 +1,8 @@
 pub mod macros;
-pub mod types;
-pub mod sink;
+mod types;
+mod sink;
+mod config;
 
 pub use types::FletchType;
-pub use sink::{FletchSink, ParquetSink};
+pub use sink::{BackgroundSink};
+pub use config::{FletchConfig};

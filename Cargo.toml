@@ -8,9 +8,13 @@ repository = "https://github.com/Ruben1729/fletch"
 
 [dependencies]
 arrow = "58.0.0"
-parquet = { version = "58.0.0", features = ["arrow"] }
+parquet = { version = "58.0.0", features = ["arrow", "async"] }
+object_store = { version = "0.13.1", features = ["aws"] }
 anyhow = "1.0"
-iceberg = { version = "0.8.0", features = ["storage-s3", "storage-fs"] }
+iceberg = "0.8.0"
+iceberg-catalog-sql = "0.8.0"
+tokio = { version = "1.49.0", features = ["full"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite"] }
 
 [dev-dependencies]
 tempfile = "3.10"
