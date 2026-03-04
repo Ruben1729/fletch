@@ -50,6 +50,11 @@ impl BackgroundSink {
                         .await
                         .map_err(|e| anyhow!("{}", e))?;
                 }
+                if record_count == 0 {
+                    let _ = writer.close().await;
+                    let _ = tokio::fs::remove_file(&temp_path).await;
+                    return Ok(());
+                }
                 let metadata = writer.close().await.map_err(|e| anyhow!("{}", e))?;
                 let data = tokio::fs::read(&temp_path).await.map_err(|e| anyhow!("{}", e))?;
                 let file_size = data.len() as u64;

@@ -121,8 +121,7 @@ impl FletchConfig {
         }
         let _tx = Transaction::new(&table);
 
-        // Note: Assuming `update_schema` is implemented as an action.
-        // If not, you may just want to return Ok(table) for now.
+        // TODO: Schema evolution
         /* let mut schema_update = tx.update_schema();
         for field in missing_fields {
             schema_update = schema_update.add_column(field.name.clone(), field.field_type.clone());

@@ -73,7 +73,7 @@ async fn main() -> anyhow::Result<()> {
 
     if let Some(record_batch_result) = accel_reader.next() {
         let batch = record_batch_result?;
-        let top_10 = batch.slice(0, 10.min(batch.num_rows())); // Safely grab up to 10
+        let top_10 = batch.slice(0, 10.min(batch.num_rows()));
         print_batches(&[top_10])?;
     }
 
@@ -93,7 +93,7 @@ async fn main() -> anyhow::Result<()> {
     // 5. PROOF OF ICEBERG METADATA (Catalog)
     // ==========================================
     println!("\n--- Iceberg Metadata Inspection ---");
-    use iceberg::{Catalog, CatalogBuilder, NamespaceIdent, TableIdent}; // FIXED: Added CatalogBuilder
+    use iceberg::{Catalog, CatalogBuilder, NamespaceIdent, TableIdent};
     use iceberg_catalog_sql::{SqlCatalogBuilder, SQL_CATALOG_PROP_URI, SQL_CATALOG_PROP_WAREHOUSE};
     use std::collections::HashMap;
     let os_path = if cfg!(windows) {

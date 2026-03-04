@@ -56,11 +56,26 @@ macro_rules! fletch_schema {
                 $(
                     let $field_name = <$rust_type as $crate::FletchType>::finish(&mut self.$field_name.0);
                 )*
-                let batch = arrow::record_batch::RecordBatch::try_new(
+                let raw_batch = arrow::record_batch::RecordBatch::try_new(
                     self.schema.clone(),
                     vec![ts_array, $( $field_name, )*]
                 )?;
-                self.sink.write_batch(batch)?;
+                let sort_options = arrow::compute::SortOptions {
+                    descending: false,
+                    nulls_first: false,
+                };
+                let sort_column = arrow::compute::SortColumn {
+                    values: raw_batch.column(0).clone(),
+                    options: Some(sort_options),
+                };
+                let sorted_indices = arrow::compute::lexsort_to_indices(&[sort_column], None)?;
+                let sorted_columns = raw_batch
+                    .columns()
+                    .iter()
+                    .map(|c| arrow::compute::take(c.as_ref(), &sorted_indices, None))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let sorted_batch = arrow::record_batch::RecordBatch::try_new(self.schema.clone(), sorted_columns)?;
+                self.sink.write_batch(sorted_batch)?;
                 Ok(())
             }
 
