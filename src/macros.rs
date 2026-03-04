@@ -9,7 +9,7 @@ macro_rules! fletch_schema {
             sink: $crate::BackgroundSink,
             schema: std::sync::Arc<arrow::datatypes::Schema>,
             timestamps: arrow::array::Int64Builder,
-            run_id: String, // 1. Defined here
+            run_id: String,
             current_ts: Option<i64>,
             $( $field_name: (<$rust_type as $crate::FletchType>::Builder, Option<$rust_type>), )*
         }
@@ -41,10 +41,10 @@ macro_rules! fletch_schema {
                 Ok(Self {
                     sink,
                     schema,
-                    timestamps: arrow::array::Int64Builder::with_capacity(10_000),
-                    run_id: run_id.to_string(), 
+                    timestamps: arrow::array::Int64Builder::with_capacity(100_000),
+                    run_id: run_id.to_string(),
                     current_ts: None,
-                    $( $field_name: (<$rust_type as $crate::FletchType>::new_builder(10_000), None), )*
+                    $( $field_name: (<$rust_type as $crate::FletchType>::new_builder(100_000), None), )*
                 })
             }
 
@@ -106,7 +106,7 @@ macro_rules! fletch_schema {
                         self.current_ts = Some(ts);
                     }
                     self.$field_name.1 = Some(value);
-                    if arrow::array::ArrayBuilder::len(&self.timestamps) >= 10_000 {
+                    if arrow::array::ArrayBuilder::len(&self.timestamps) >= 100_000 {
                         self.flush_batch()?;
                     }
                     Ok(())
