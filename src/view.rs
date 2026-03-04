@@ -19,6 +19,7 @@ pub struct FletchViewBuilder<'a> {
     workspace: &'a FletchWorkspace,
     run_id: Option<String>,
     sources: Vec<ViewSource>,
+    add_relative_timestamp: bool
 }
 
 impl<'a> FletchViewBuilder<'a> {
@@ -27,6 +28,7 @@ impl<'a> FletchViewBuilder<'a> {
             workspace,
             run_id: None,
             sources: Vec::new(),
+            add_relative_timestamp: false
         }
     }
 
@@ -40,6 +42,11 @@ impl<'a> FletchViewBuilder<'a> {
             table_name: table_name.to_string(),
             columns: columns.iter().map(|s| s.to_string()).collect(),
         });
+        self
+    }
+
+    pub fn with_relative_timestamp(mut self) -> Self {
+        self.add_relative_timestamp = true;
         self
     }
 
@@ -96,8 +103,17 @@ impl<'a> FletchViewBuilder<'a> {
             }
         }
 
+        let mut final_lf = base_lf.unwrap();
+
+        if self.add_relative_timestamp {
+            final_lf = final_lf.with_columns([
+                (col("timestamp_ns") - col("timestamp_ns").min().over(["run_id"]))
+                    .alias("relative_time_ns")
+            ]);
+        }
+
         Ok(FletchView {
-            lazy_frame: base_lf.unwrap(),
+            lazy_frame: final_lf,
         })
     }
 

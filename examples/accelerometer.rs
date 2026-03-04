@@ -92,6 +92,7 @@ async fn main() -> anyhow::Result<()> {
     let view_fusion = FletchViewBuilder::new(&workspace)
         .add_source("AccelerometerTelemetry", &["accel_z"])
         .add_source("PowerSupplyTelemetry", &["voltage"])
+        .with_relative_timestamp()
         .build()
         .await?;
 
