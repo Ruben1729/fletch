@@ -2,7 +2,7 @@ use std::fs::File;
 use tempfile::tempdir;
 use arrow::util::pretty::print_batches;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-use fletch::{fletch_schema, FletchType, FletchWorkspace};
+use fletch::{fletch_schema, FletchType, FletchWorkspace, FletchViewBuilder};
 
 fletch_schema! {
     AccelerometerTelemetry {
@@ -65,6 +65,44 @@ async fn main() -> anyhow::Result<()> {
     accel_stream.close()?;
     pwr_stream.close()?;
     println!("Successfully wrote telemetry and committed Iceberg transactions.\n");
+
+    // ==========================================
+    // 4. DATA EXPLORATION (The View Builder)
+    // ==========================================
+    println!("Building Analytical Views using Polars...\n");
+    let view_accel = FletchViewBuilder::new(&workspace)
+        .run_id(run_id)
+        .add_source("AccelerometerTelemetry", &["accel_x", "accel_z"])
+        .build()
+        .await?;
+
+    let df_accel = view_accel.collect()?;
+    println!("--- View 1: Accelerometer (X, Z only) ---");
+    println!("{}", df_accel.head(Some(10)));
+    println!("\n");
+
+    let view_pwr = FletchViewBuilder::new(&workspace)
+        .run_id(run_id)
+        .add_source("PowerSupplyTelemetry", &["voltage", "current_consumption"])
+        .build()
+        .await?;
+
+    let df_pwr = view_pwr.collect()?;
+    println!("--- View 2: Power Supply ---");
+    println!("{}", df_pwr.head(Some(10)));
+    println!("\n");
+
+    let view_fusion = FletchViewBuilder::new(&workspace)
+        .run_id(run_id)
+        .add_source("AccelerometerTelemetry", &["accel_z"])
+        .add_source("PowerSupplyTelemetry", &["voltage"])
+        .build()
+        .await?;
+
+    let df_fusion = view_fusion.collect()?;
+    println!("--- View 3: Sensor Fusion (Accel Z + Voltage) ---");
+    println!("{}", df_fusion.head(Some(10)));
+    println!("\n");
 
     Ok(())
 }
