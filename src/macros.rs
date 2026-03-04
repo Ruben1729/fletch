@@ -9,14 +9,23 @@ macro_rules! fletch_schema {
             sink: $crate::BackgroundSink,
             schema: std::sync::Arc<arrow::datatypes::Schema>,
             timestamps: arrow::array::Int64Builder,
+            run_id: String, // 1. Defined here
             current_ts: Option<i64>,
             $( $field_name: (<$rust_type as $crate::FletchType>::Builder, Option<$rust_type>), )*
         }
 
         impl $struct_name {
-            pub async fn try_new(uri: &str, run_id: &str) -> anyhow::Result<Self> {
+            pub async fn try_new(workspace: &$crate::FletchWorkspace, run_id: &str) -> anyhow::Result<Self> {
                 let mut fields = vec![
                     arrow::datatypes::Field::new("timestamp_ns", arrow::datatypes::DataType::Int64, false),
+                    arrow::datatypes::Field::new(
+                        "run_id",
+                        arrow::datatypes::DataType::Dictionary(
+                            Box::new(arrow::datatypes::DataType::Int32),
+                            Box::new(arrow::datatypes::DataType::Utf8),
+                        ),
+                        false,
+                    ),
                 ];
                 $( fields.push(arrow::datatypes::Field::new(
                     stringify!($field_name),
@@ -27,12 +36,13 @@ macro_rules! fletch_schema {
                     arrow::datatypes::Schema::new(fields)
                 );
                 let table_name = stringify!($struct_name);
-                let config = $crate::FletchConfig::init(uri, table_name, run_id, schema.clone()).await?;
+                let config = $crate::FletchConfig::init(workspace, table_name, schema.clone()).await?;
                 let sink = $crate::BackgroundSink::spawn(config, schema.clone())?;
                 Ok(Self {
                     sink,
                     schema,
                     timestamps: arrow::array::Int64Builder::with_capacity(10_000),
+                    run_id: run_id.to_string(), 
                     current_ts: None,
                     $( $field_name: (<$rust_type as $crate::FletchType>::new_builder(10_000), None), )*
                 })
@@ -53,12 +63,18 @@ macro_rules! fletch_schema {
                 self.current_ts = None;
                 if arrow::array::ArrayBuilder::is_empty(&self.timestamps) { return Ok(()); }
                 let ts_array = std::sync::Arc::new(self.timestamps.finish()) as arrow::array::ArrayRef;
+                let num_rows = ts_array.len();
+                let mut run_id_builder = arrow::array::StringDictionaryBuilder::<arrow::datatypes::Int32Type>::new();
+                for _ in 0..num_rows {
+                    run_id_builder.append_value(&self.run_id);
+                }
+                let run_id_array = std::sync::Arc::new(run_id_builder.finish()) as arrow::array::ArrayRef;
                 $(
                     let $field_name = <$rust_type as $crate::FletchType>::finish(&mut self.$field_name.0);
                 )*
                 let raw_batch = arrow::record_batch::RecordBatch::try_new(
                     self.schema.clone(),
-                    vec![ts_array, $( $field_name, )*]
+                    vec![ts_array, run_id_array, $( $field_name, )*]
                 )?;
                 let sort_options = arrow::compute::SortOptions {
                     descending: false,
